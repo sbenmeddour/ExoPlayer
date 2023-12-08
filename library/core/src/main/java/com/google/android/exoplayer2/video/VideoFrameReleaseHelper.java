@@ -55,6 +55,12 @@ import org.checkerframework.checker.nullness.qual.MonotonicNonNull;
 @Deprecated
 public final class VideoFrameReleaseHelper {
 
+  public interface OnFrameRateEstimatedListener {
+    void onNewFrameRate(final float value);
+  }
+
+  @Nullable public static OnFrameRateEstimatedListener onFrameRateEstimatedListener = null;
+
   private static final String TAG = "VideoFrameReleaseHelper";
 
   /**
@@ -302,12 +308,7 @@ public final class VideoFrameReleaseHelper {
    * called to update the surface.
    */
   private void updateSurfaceMediaFrameRate() {
-    if (Util.SDK_INT < 30 || surface == null) {
-      return;
-    }
-
-    float candidateFrameRate =
-        frameRateEstimator.isSynced() ? frameRateEstimator.getFrameRate() : formatFrameRate;
+    float candidateFrameRate = frameRateEstimator.isSynced() ? frameRateEstimator.getFrameRate() : formatFrameRate;
     if (candidateFrameRate == surfaceMediaFrameRate) {
       return;
     }
@@ -350,15 +351,19 @@ public final class VideoFrameReleaseHelper {
    *     unchanged.
    */
   private void updateSurfacePlaybackFrameRate(boolean forceUpdate) {
+    float surfacePlaybackFrameRate = 0;
+    if (started && surfaceMediaFrameRate != Format.NO_VALUE) {
+      surfacePlaybackFrameRate = surfaceMediaFrameRate * playbackSpeed;
+    }
+    final OnFrameRateEstimatedListener listener = VideoFrameReleaseHelper.onFrameRateEstimatedListener;
+    if (listener != null) {
+      listener.onNewFrameRate(surfaceMediaFrameRate * playbackSpeed);
+    }
+
     if (Util.SDK_INT < 30
         || surface == null
         || changeFrameRateStrategy == C.VIDEO_CHANGE_FRAME_RATE_STRATEGY_OFF) {
       return;
-    }
-
-    float surfacePlaybackFrameRate = 0;
-    if (started && surfaceMediaFrameRate != Format.NO_VALUE) {
-      surfacePlaybackFrameRate = surfaceMediaFrameRate * playbackSpeed;
     }
     // We always set the frame-rate if we have a new surface, since we have no way of knowing what
     // it might have been set to previously.
@@ -376,6 +381,10 @@ public final class VideoFrameReleaseHelper {
    * C#VIDEO_CHANGE_FRAME_RATE_STRATEGY_OFF}.
    */
   private void clearSurfaceFrameRate() {
+    final OnFrameRateEstimatedListener listener = VideoFrameReleaseHelper.onFrameRateEstimatedListener;
+    if (listener != null) {
+      listener.onNewFrameRate(0f);
+    }
     if (Util.SDK_INT < 30
         || surface == null
         || changeFrameRateStrategy == C.VIDEO_CHANGE_FRAME_RATE_STRATEGY_OFF
